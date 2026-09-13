@@ -46,7 +46,7 @@ RUN mkdir -p src \
  && cp -rf launch_ROS2/ launch/
 
 # --- 3. Сборка через colcon (с флагами livox для Humble) ---
-RUN . /opt/ros/humble/setup.sh \
+RUN . /opt/ros/${ROS_DISTRO}/setup.sh \
  && colcon build --symlink-install \
       --cmake-args -DCMAKE_BUILD_TYPE=Release \
                    -DROS_EDITION=ROS2 -DHUMBLE_ROS=humble \
