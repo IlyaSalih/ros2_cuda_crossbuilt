@@ -32,7 +32,7 @@ jobs:
             runner: ubuntu-24.04-arm
             tags: ghcr.io/ilyasalih/ros2-cuda-jetson-agx:humble-l4t-r36.4
             cache_scope: base-jetson-native
-          # Orin Nano (JP7-класс): контекст = корень репо (нужен scripts/install_ros2.sh).
+          # Orin Nano (JP7-класс, Jazzy): контекст = корень репо (нужен scripts/install_ros2.sh).
           - name: jetson-nano (JP7/Jazzy, native ARM64)
             context: .
             file: docker/base/jetson-nano/Dockerfile
@@ -57,7 +57,7 @@ jobs:
           push: true
           tags: ${{ matrix.tags }}
           cache-from: type=gha,scope=${{ matrix.cache_scope }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.cache_scope }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.cache_scope }},ignore-error=true
 
   # ============ Второй способ сборки ARM64 (3.4): КРОСС через QEMU ============
   build-base-cross-qemu:
@@ -83,11 +83,9 @@ jobs:
           push: true
           tags: ghcr.io/ilyasalih/ros2-cuda-jetson-agx:humble-l4t-r36.4-qemu
           cache-from: type=gha,scope=base-jetson-qemu
-          cache-to: type=gha,mode=max,scope=base-jetson-qemu
+          cache-to: type=gha,mode=max,scope=base-jetson-qemu,ignore-error=true
 
   # ================= Пакет FAST-LIO2 поверх баз + ТЕСТ образа =================
-  # (Orin Nano/Jazzy сюда пока НЕ добавлен — сборка FAST-LIO под Jazzy под вопросом,
-  #  пробуем отдельно, чтобы не ронять основную матрицу.)
   build-package:
     needs: build-base
     runs-on: ${{ matrix.runner }}
@@ -112,6 +110,13 @@ jobs:
             cuda_arch: "87"
             tags: ghcr.io/ilyasalih/fast-lio2-jetson-agx:humble-l4t-r36.4
             cache_scope: pkg-jetson
+          - name: jetson-nano (Jazzy)
+            arch: linux/arm64
+            runner: ubuntu-24.04-arm
+            base: ghcr.io/ilyasalih/ros2-cuda-jetson-nano:jazzy-cuda13-ubuntu24.04
+            cuda_arch: "87"
+            tags: ghcr.io/ilyasalih/fast-lio2-jetson-nano:jazzy-cuda13
+            cache_scope: pkg-jetson-nano
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -131,7 +136,7 @@ jobs:
             CUDA_ARCHITECTURES=${{ matrix.cuda_arch }}
           tags: ${{ matrix.tags }}
           cache-from: type=gha,scope=${{ matrix.cache_scope }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.cache_scope }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.cache_scope }},ignore-error=true
       - name: Test image — ${{ matrix.name }}
         run: |
           docker pull ${{ matrix.tags }}

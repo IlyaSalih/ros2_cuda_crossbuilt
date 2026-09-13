@@ -24,28 +24,33 @@ docker build \
 Для пакета без этих зависимостей соответствующие шаги можно убрать/сделать опциональными. Направление
 развития — манифест `packages/<name>.yaml` (repo, branch, cuda-arch), который CI перебирает матрицей.
 
-## Добавить новую платформу (на примере Orin Nano, JP7)
-Двухслойная архитектура рассчитана на это. По шагам:
+## Добавить новую платформу
+Двухслойная архитектура рассчитана на это. По шагам (на примере уже реализованного **Orin Nano**):
 
-1. **Базовый Dockerfile** `docker/base/jetson-nano/Dockerfile`:
-   - `FROM` подходящего l4t-образа под JP7 (Ubuntu 24.04);
-   - установка ROS2 **Jazzy** (не Humble — JP7 на Ubuntu 24.04). Логика установки уже параметризована
-     в `scripts/install_ros2.sh` — достаточно вызвать её с `jazzy`.
+1. **Базовый Dockerfile** `docker/base/<platform>/Dockerfile`:
+   - `FROM` подходящего образа с CUDA (для Orin Nano — `nvidia/cuda:13.x-devel-ubuntu24.04`, т.к.
+     официального l4t под JP7 ещё нет);
+   - установка ROS2 нужного дистрибутива через общий скрипт: `RUN bash /tmp/install_ros2.sh <distro>`
+     (`humble` для Ubuntu 22.04, `jazzy` для Ubuntu 24.04). Скрипт копируется из `scripts/`, поэтому
+     build-контекст этой платформы = корень репо (см. поля `context`/`file` в матрице).
 
 2. **Матрицы в `build.yml`** — добавить ячейку в `build-base` и в `build-package`:
    ```yaml
-   - name: jetson-nano (native ARM64)
-     context: docker/base/jetson-nano
+   # base:
+   - name: <platform> (native ARM64)
+     context: .
+     file: docker/base/<platform>/Dockerfile
      arch: linux/arm64
      runner: ubuntu-24.04-arm
-     tags: ghcr.io/ilyasalih/ros2-cuda-jetson-nano:jazzy-l4t-jp7
-     cache_scope: base-jetson-nano
+     tags: ghcr.io/<user>/ros2-cuda-<platform>:<tag>
+     cache_scope: base-<platform>
+   # package: своя ячейка с BASE_IMAGE = эта база, CUDA_ARCHITECTURES=87
    ```
-   и аналогичную ячейку пакета с `BASE_IMAGE` = эта база, `CUDA_ARCHITECTURES=87`.
 
-3. **Собрать пакет под Jazzy.** Тут единственная реальная неопределённость: FAST-LIO2 (`Taeyoung96/FAST_LIO_ROS2`,
-   ветка `ros2`) заточен под Humble; на Jazzy может потребоваться другая ветка/форк или мелкие правки.
-   Именно поэтому Orin Nano вынесен как **опциональный** — база добавляется тривиально, а совместимость
-   пакета с Jazzy требует проверки.
+3. **Особенности дистрибутива при сборке пакета.** Если платформа на другом ROS2 (например, Jazzy на
+   Ubuntu 24.04), Humble-пакеты могут не собраться из-за требований к стандарту C++. Так было с FAST-LIO2
+   на Orin Nano/Jazzy: rclcpp требует C++17, а FAST-LIO жёстко ставит C++14 — в `docker/package/Dockerfile`
+   добавлен патч, заменяющий C++14 → C++17 в его `CMakeLists.txt` перед сборкой. Путь к setup-скрипту ROS2
+   тоже параметризован (`/opt/ros/${ROS_DISTRO}/setup.sh`).
 
 Всё остальное (кеш, тесты, публикация, два способа сборки) платформа наследует от матрицы автоматически.
