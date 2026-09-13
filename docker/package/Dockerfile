@@ -45,6 +45,10 @@ RUN mkdir -p src \
  && cp -f package_ROS2.xml package.xml \
  && cp -rf launch_ROS2/ launch/
 
+# --- Патч для Jazzy: FAST_LIO жёстко ставит C++14, а rclcpp в Jazzy требует C++17 ---
+RUN sed -i 's/CMAKE_CXX_STANDARD 14/CMAKE_CXX_STANDARD 17/g; s/c++14/c++17/g' \
+        src/fast_lio_ros2/FAST_LIO/CMakeLists.txt
+
 # --- 3. Сборка через colcon (с флагами livox для Humble) ---
 RUN . /opt/ros/${ROS_DISTRO}/setup.sh \
  && colcon build --symlink-install \
