@@ -20,7 +20,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 # Единый установщик ROS2 (тот же референс, что для x86/AGX) — с дистрибутивом jazzy.
 COPY scripts/install_ros2.sh /tmp/install_ros2.sh
-RUN /tmp/install_ros2.sh jazzy && rm -f /tmp/install_ros2.sh
+RUN bash /tmp/install_ros2.sh jazzy && rm -f /tmp/install_ros2.sh
 
 SHELL ["/bin/bash", "-c"]
 CMD ["bash"]
