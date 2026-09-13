@@ -15,7 +15,7 @@
 ## Платформы
 | Платформа | Арх. | CUDA (sm_) | База | ROS2 | Статус |
 |-----------|------|------------|------|------|--------|
-| x86_64 + NVIDIA dGPU | amd64 | 89 (пример: RTX 4060) | `nvidia/cuda:12.6.2-devel-ubuntu22.04` | Humble | ✅ |
+| x86_64 + NVIDIA dGPU | amd64 | 89 | `nvidia/cuda:12.6.2-devel-ubuntu22.04` | Humble | ✅ |
 | Jetson AGX Orin (JP 6.2.2) | arm64 | 87 | `nvcr.io/nvidia/l4t-jetpack:r36.4.0` | Humble | ✅ |
 | Jetson Orin Nano (JP 7) | arm64 | 87 | l4t (JP7, Ubuntu 24.04) | Jazzy | ⬜ опционально |
 

@@ -20,16 +20,26 @@ jobs:
         include:
           - name: x86 (native)
             context: docker/base/x86
+            file: docker/base/x86/Dockerfile
             arch: linux/amd64
             runner: ubuntu-latest
             tags: ghcr.io/ilyasalih/ros2-cuda-x86:humble-cuda12.6
             cache_scope: base-x86
           - name: jetson-agx (native ARM64)
             context: docker/base/jetson-agx
+            file: docker/base/jetson-agx/Dockerfile
             arch: linux/arm64
             runner: ubuntu-24.04-arm
             tags: ghcr.io/ilyasalih/ros2-cuda-jetson-agx:humble-l4t-r36.4
             cache_scope: base-jetson-native
+          # Orin Nano (JP7-класс): контекст = корень репо (нужен scripts/install_ros2.sh).
+          - name: jetson-nano (JP7/Jazzy, native ARM64)
+            context: .
+            file: docker/base/jetson-nano/Dockerfile
+            arch: linux/arm64
+            runner: ubuntu-24.04-arm
+            tags: ghcr.io/ilyasalih/ros2-cuda-jetson-nano:jazzy-cuda13-ubuntu24.04
+            cache_scope: base-jetson-nano
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -42,6 +52,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
           platforms: ${{ matrix.arch }}
           push: true
           tags: ${{ matrix.tags }}
@@ -75,6 +86,8 @@ jobs:
           cache-to: type=gha,mode=max,scope=base-jetson-qemu
 
   # ================= Пакет FAST-LIO2 поверх баз + ТЕСТ образа =================
+  # (Orin Nano/Jazzy сюда пока НЕ добавлен — сборка FAST-LIO под Jazzy под вопросом,
+  #  пробуем отдельно, чтобы не ронять основную матрицу.)
   build-package:
     needs: build-base
     runs-on: ${{ matrix.runner }}
@@ -119,10 +132,6 @@ jobs:
           tags: ${{ matrix.tags }}
           cache-from: type=gha,scope=${{ matrix.cache_scope }}
           cache-to: type=gha,mode=max,scope=${{ matrix.cache_scope }}
-
-      # Тестирование собранного образа (3.5) — на своей архитектуре:
-      # x86 на x86-раннере, jetson на ARM-раннере. GPU не требуется
-      # (smoke-test доказывает CUDA компиляцией .cu + проверяет ROS2-пакеты).
       - name: Test image — ${{ matrix.name }}
         run: |
           docker pull ${{ matrix.tags }}
