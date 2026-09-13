@@ -1,0 +1,42 @@
+name: Build and push images
+
+# Триггеры (п.3.5): пуш в main/master и ручной запуск из вкладки Actions.
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  BASE_IMAGE: ghcr.io/ilyasalih/ros2-cuda-x86:humble-cuda12.6
+  PKG_IMAGE:  ghcr.io/ilyasalih/fast-lio2-x86:humble-cuda12.6
+
+jobs:
+  build-x86:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write          # право пушить в ghcr через GITHUB_TOKEN
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- Базовый образ: ROS2 Humble + CUDA (x86) ---
+      - name: Build base image
+        run: docker build -t "$BASE_IMAGE" docker/base/x86/
+
+      - name: Push base image
+        run: docker push "$BASE_IMAGE"
+
+      # --- Пакет FAST-LIO2 поверх только что собранной базы ---
+      - name: Build FAST-LIO2 image
+        run: docker build --build-arg BASE_IMAGE="$BASE_IMAGE" -t "$PKG_IMAGE" docker/package/
+
+      - name: Push FAST-LIO2 image
+        run: docker push "$PKG_IMAGE"
