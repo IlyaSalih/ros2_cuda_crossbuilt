@@ -1,42 +1,124 @@
-name: Build and push images
+name: Build & push (matrix)
 
-# Триггеры (п.3.5): пуш в main/master и ручной запуск из вкладки Actions.
+# Триггеры (3.5): push в main/master, создание тега vX.Y.Z, ручной запуск.
 on:
   push:
     branches: [ main, master ]
+    tags: [ 'v*' ]
   workflow_dispatch:
 
-env:
-  BASE_IMAGE: ghcr.io/ilyasalih/ros2-cuda-x86:humble-cuda12.6
-  PKG_IMAGE:  ghcr.io/ilyasalih/fast-lio2-x86:humble-cuda12.6
-
 jobs:
-  build-x86:
-    runs-on: ubuntu-latest
+  # ================= Базовые образы: платформы (нативная сборка) =================
+  # Канонические базы, на которых строятся пакеты. Матрица по платформам.
+  build-base:
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
-      packages: write          # право пушить в ghcr через GITHUB_TOKEN
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: x86 (native)
+            context: docker/base/x86
+            arch: linux/amd64
+            runner: ubuntu-latest
+            tags: ghcr.io/ilyasalih/ros2-cuda-x86:humble-cuda12.6
+            cache_scope: base-x86
+          - name: jetson-agx (native ARM64)
+            context: docker/base/jetson-agx
+            arch: linux/arm64
+            runner: ubuntu-24.04-arm
+            tags: ghcr.io/ilyasalih/ros2-cuda-jetson-agx:humble-l4t-r36.4
+            cache_scope: base-jetson-native
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push base — ${{ matrix.name }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          platforms: ${{ matrix.arch }}
+          push: true
+          tags: ${{ matrix.tags }}
+          cache-from: type=gha,scope=${{ matrix.cache_scope }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.cache_scope }}
 
-      # --- Базовый образ: ROS2 Humble + CUDA (x86) ---
-      - name: Build base image
-        run: docker build -t "$BASE_IMAGE" docker/base/x86/
+  # ============ Второй способ сборки ARM64 (3.4): КРОСС через QEMU ============
+  # Идёт независимо (пакеты от него НЕ зависят) — демонстрация метода + отказоустойчивость.
+  build-base-cross-qemu:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up QEMU (эмуляция ARM64)
+        uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push Jetson AGX base (cross via QEMU)
+        uses: docker/build-push-action@v6
+        with:
+          context: docker/base/jetson-agx
+          platforms: linux/arm64
+          push: true
+          tags: ghcr.io/ilyasalih/ros2-cuda-jetson-agx:humble-l4t-r36.4-qemu
+          cache-from: type=gha,scope=base-jetson-qemu
+          cache-to: type=gha,mode=max,scope=base-jetson-qemu
 
-      - name: Push base image
-        run: docker push "$BASE_IMAGE"
-
-      # --- Пакет FAST-LIO2 поверх только что собранной базы ---
-      - name: Build FAST-LIO2 image
-        run: docker build --build-arg BASE_IMAGE="$BASE_IMAGE" -t "$PKG_IMAGE" docker/package/
-
-      - name: Push FAST-LIO2 image
-        run: docker push "$PKG_IMAGE"
+  # ================= Пакет FAST-LIO2 поверх баз (по платформам) =================
+  # Один и тот же шаблон docker/package, разные аргументы (3.3). Нативные раннеры.
+  build-package:
+    needs: build-base
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: x86
+            arch: linux/amd64
+            runner: ubuntu-latest
+            base: ghcr.io/ilyasalih/ros2-cuda-x86:humble-cuda12.6
+            cuda_arch: "89"
+            tags: ghcr.io/ilyasalih/fast-lio2-x86:humble-cuda12.6
+            cache_scope: pkg-x86
+          - name: jetson-agx
+            arch: linux/arm64
+            runner: ubuntu-24.04-arm
+            base: ghcr.io/ilyasalih/ros2-cuda-jetson-agx:humble-l4t-r36.4
+            cuda_arch: "87"
+            tags: ghcr.io/ilyasalih/fast-lio2-jetson-agx:humble-l4t-r36.4
+            cache_scope: pkg-jetson
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push package — ${{ matrix.name }}
+        uses: docker/build-push-action@v6
+        with:
+          context: docker/package
+          platforms: ${{ matrix.arch }}
+          push: true
+          build-args: |
+            BASE_IMAGE=${{ matrix.base }}
+            CUDA_ARCHITECTURES=${{ matrix.cuda_arch }}
+          tags: ${{ matrix.tags }}
+          cache-from: type=gha,scope=${{ matrix.cache_scope }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.cache_scope }}
