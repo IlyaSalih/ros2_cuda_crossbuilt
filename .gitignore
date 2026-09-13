@@ -1,0 +1,22 @@
+# Завендоренные исходники (качаются scripts/fetch_sources.sh, в репо не храним)
+docker/package/src/
+
+# Временные артефакты загрузки
+/tmp/ros2_src_dl/
+
+# Логи и сборочный мусор
+*.log
+build/
+install/
+log/
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Редакторы / ОС
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
